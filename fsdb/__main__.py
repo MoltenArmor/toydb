@@ -119,12 +119,14 @@ def main():
                     )
 
                 case ["links", table]:
-                    for l, r in db.query_links(table):
-                        print(f"{l} -> {r}")
+                    for src_pk, dest_table, dest_pk in db.query_links(table):
+                        print(f"{src_pk} -> {dest_table}:{dest_pk}")
 
-                case ["links", table, left, right]:
-                    for l, r in db.query_links(table, left, right):
-                        print(f"{l} -> {r}")
+                case ["links", table, left, middle, right]:
+                    for src_pk, dest_table, dest_pk in db.query_links(
+                        table, left, middle, right
+                    ):
+                        print(f"{src_pk} -> {dest_table}:{dest_pk}")
 
                 case _:
                     raise ValueError(f"UNKNOWN USAGE!")

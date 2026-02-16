@@ -190,18 +190,23 @@ class FSDB:
         if not self._target_f(dest_table, dest_pk).exists():
             raise FileNotFoundError(f"Primary key {dest_pk} not found in {dest_table}.")
 
-        self.upsert(src_table, f"{src_pk}:{dest_pk}", data or {})
+        self.upsert(src_table, f"{src_pk}:{dest_table}:{dest_pk}", data or {})
 
     def query_links(
-        self, table: str, left: str = "*", right: str = "*"
-    ) -> list[tuple[str, str]]:
+        self,
+        table: str,
+        left: str = "*",
+        middle: str = "*",
+        right: str = "*",
+    ) -> list[tuple[str, str, str]]:
         return [
             (
                 parts[0],
+                parts[1],
                 parts[2],
             )
-            for p in (self.root / table).glob(f"{left}:{right}")
-            if ":" in (name := Path(p).name) and (parts := name.partition(":"))
+            for p in (self.root / table).glob(f"{left}:{middle}:{right}")
+            if ":" in (name := Path(p).name) and (parts := name.split(":", 2))
         ]
 
     def scan(
