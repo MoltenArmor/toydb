@@ -59,7 +59,7 @@ class FSDB:
         if not (d := (self.root / table)).exists():
             raise FileNotFoundError(f"Table {table} not found")
 
-        return [p.name for p in d.iterdir() if p.is_file() and ":" not in p.name]
+        return [p.name for p in d.iterdir() if p.is_file()]
 
     def insert(
         self,
@@ -127,11 +127,13 @@ class FSDB:
         return False
 
     def _index(self, table: str, pk: str, field: str, value: str) -> None:
-        index = self._target_f(table, f"@{field}") / value
-        target = Path("..") / pk
+        valdir = self._target_f(table, f"@{field}") / value
+        valdir.mkdir(exist_ok=True)
+        link = valdir / pk
+        target = Path("../..") / pk
 
-        index.unlink(missing_ok=True)
-        index.symlink_to(target)
+        link.unlink(missing_ok=True)
+        link.symlink_to(target)
 
     def has_index(self, table: str, field: str) -> bool:
         return (self.root / table / f"@{field}").is_dir()
@@ -160,21 +162,29 @@ class FSDB:
             if (
                 old
                 and field in old
-                and (link := (idxdir / str(old[field]))).is_symlink()
-                and link.readlink() == Path(f"../{pk}")
+                and (link := (idxdir / str(old[field]) / pk)).is_symlink()
             ):
                 link.unlink()
 
             if new and field in new:
                 self._index(table, pk, field, str(new[field]))
 
-    def find(self, table: str, field: str, value: str) -> dict[str, JSONValue] | None:
-        if (p := self._target_f(table, f"@{field}") / value).exists():
+    def find(self, table: str, field: str, value: str) -> list[dict[str, JSONValue]]:
+        valdir = self._target_f(table, f"@{field}") / value
+        if not valdir.is_dir():
+            return []
+
+        ret: list[dict[str, JSONValue]] = []
+        for link in valdir.iterdir():
+            if not link.is_symlink() or not link.exists():
+                continue
             try:
-                with open(p, "r") as f:
-                    return cast(dict[str, JSONValue], json.load(f))
+                with open(link, "r") as f:
+                    ret.append(cast(dict[str, JSONValue], json.load(f)))
             except:
-                pass
+                continue
+
+        return ret
 
     def link(
         self,
@@ -190,23 +200,40 @@ class FSDB:
         if not self._target_f(dest_table, dest_pk).exists():
             raise FileNotFoundError(f"Primary key {dest_pk} not found in {dest_table}.")
 
-        self.upsert(src_table, f"{src_pk}:{dest_table}:{dest_pk}", data or {})
+        (d := self.root / src_table / "_links" / src_pk).mkdir(
+            parents=True, exist_ok=True
+        )
+
+        tmp = self.workdir / f"link-{src_pk}-{dest_table}-{dest_pk}-{uuid.uuid1()}"
+        try:
+            with open(tmp, "w") as f:
+                json.dump(data or {}, f)
+            shutil.move(tmp, d / f"{dest_table}:{dest_pk}")  # pyright: ignore[reportUnusedCallResult]
+        except Exception:
+            if tmp.exists():
+                tmp.unlink()
+            raise
 
     def query_links(
         self,
         table: str,
-        left: str = "*",
-        middle: str = "*",
-        right: str = "*",
+        src_pk: str = "*",
+        dest_table: str = "*",
+        dest_pk: str = "*",
     ) -> list[tuple[str, str, str]]:
+        links = self.root / table / "_links"
+        if not links.is_dir():
+            return []
+
         return [
-            (
-                parts[0],
-                parts[1],
-                parts[2],
-            )
-            for p in (self.root / table).glob(f"{left}:{middle}:{right}")
-            if ":" in (name := Path(p).name) and (parts := name.split(":", 2))
+            (d.name, parts[0], parts[1])
+            for d in links.glob(src_pk)
+            if d.is_dir()
+            for p in d.glob(f"{dest_table}:{dest_pk}")
+            if ":" in p.name
+            and (parts := p.name.split(":", 1))
+            and self._target_f(table, d.name).is_file()
+            and self._target_f(parts[0], parts[1]).is_file()
         ]
 
     def scan(
@@ -216,9 +243,6 @@ class FSDB:
 
         for p in dir.glob(pattern):
             if not p.is_file():
-                continue
-
-            if ":" in p.name:
                 continue
 
             try:

@@ -95,8 +95,9 @@ def main():
                     logging.info("Indexed")
 
                 case ["find", table, field, value]:
-                    if data := db.find(table, field, value):
-                        print(json.dumps(data, indent=2))
+                    if results := db.find(table, field, value):
+                        for data in results:
+                            print(json.dumps(data, indent=2))
                     else:
                         raise Exception(f"Not found!")
 
