@@ -24,7 +24,7 @@ def _create(db: FSDB, table: str) -> Response:
 
 
 def _drop(db: FSDB, table: str) -> Response:
-    return {"ok": db.drop(table)}
+    return {"status": db.drop(table)}
 
 
 def _get(db: FSDB, table: str, pk: str) -> Response:
@@ -47,7 +47,7 @@ def _upsert(db: FSDB, table: str, pk: str, data: JSONValue) -> Response:
 
 
 def _delete(db: FSDB, table: str, pk: str) -> Response:
-    return {"ok": db.delete(table, pk)}
+    return {"status": db.delete(table, pk)}
 
 
 def _scan(db: FSDB, table: str, pattern: str = "*") -> Response:
@@ -112,7 +112,7 @@ def sidecar(db: FSDB) -> None:
     for l in sys.stdin:
         r = json.loads(l)
         try:
-            resp = {"parameters": DISPATCH[r["method"]](db, **r.get("parameters", {}))}
+            resp = {"parameters": DISPATCH[r["method"]](db, **r["parameters"])}
         except KeyError:
             resp = {"error": "UnknownMethod", "parameters": {"method": r["method"]}}
         except Exception as e:

@@ -236,9 +236,7 @@ class FSDB:
             and self._target_f(parts[0], parts[1]).is_file()
         ]
 
-    def scan(
-        self, table: str, pattern: str = "*"
-    ) -> Iterator[tuple[str, JSONValue]]:
+    def scan(self, table: str, pattern: str = "*") -> Iterator[tuple[str, JSONValue]]:
         dir = self._target_f(table)
 
         for p in dir.glob(pattern):
