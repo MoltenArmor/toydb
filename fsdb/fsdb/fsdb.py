@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 import os
 import json
 import uuid
@@ -8,8 +8,8 @@ from pathlib import Path
 
 FSDB_ROOT: Final[Path] = Path(os.getenv("FSDB_ROOT", "/var/lib/fsdb"))
 FSDB_WORKDIR: Final[Path | None] = None
-type JSONValue = dict[
-    str, dict[str, JSONValue] | list[JSONValue] | str | int | float | bool | None
+type JSONValue = Mapping[
+    str, JSONValue | Sequence[JSONValue] | str | int | float | bool | None
 ]
 
 
@@ -32,7 +32,7 @@ class FSDB:
         else:
             return self.root / table
 
-    def _write(self, table: str, pk: str, data: dict[str, JSONValue]) -> None:
+    def _write(self, table: str, pk: str, data: JSONValue) -> None:
         # We do not create tables automatically
         if not self._target_f(table).exists():
             raise FileNotFoundError(f"Table {table} does not exist")
@@ -65,7 +65,7 @@ class FSDB:
         self,
         table: str,
         pk: str,
-        data: dict[str, JSONValue],
+        data: JSONValue,
     ) -> None:
         if self._target_f(table, pk).exists():
             raise FileExistsError(f"Record {pk} already exists in {table}")
@@ -77,7 +77,7 @@ class FSDB:
         self,
         table: str,
         pk: str,
-        data: dict[str, JSONValue],
+        data: JSONValue,
     ) -> None:
         current = self.get(table, pk)
 
@@ -91,18 +91,18 @@ class FSDB:
         self,
         table: str,
         pk: str,
-        data: dict[str, JSONValue],
+        data: JSONValue,
     ) -> None:
         current = self.get(table, pk)
 
         self._write(table, pk, data)
         self._update_index(table, pk, current, data)
 
-    def get(self, table: str, pk: str) -> dict[str, JSONValue] | None:
+    def get(self, table: str, pk: str) -> JSONValue | None:
         if (p := self._target_f(table, pk)).exists() and p.is_file():
             try:
                 with open(p, "r") as f:
-                    return cast(dict[str, JSONValue], json.load(f))
+                    return cast(JSONValue, json.load(f))
             # Not JSON???
             except:
                 return None
@@ -151,8 +151,8 @@ class FSDB:
         self,
         table: str,
         pk: str,
-        old: dict[str, JSONValue] | None,
-        new: dict[str, JSONValue] | None,
+        old: JSONValue | None,
+        new: JSONValue | None,
     ) -> None:
         for idxdir in (self.root / table).glob("@*"):
             if not idxdir.is_dir():
@@ -169,18 +169,18 @@ class FSDB:
             if new and field in new:
                 self._index(table, pk, field, str(new[field]))
 
-    def find(self, table: str, field: str, value: str) -> list[dict[str, JSONValue]]:
+    def find(self, table: str, field: str, value: str) -> list[JSONValue]:
         valdir = self._target_f(table, f"@{field}") / value
         if not valdir.is_dir():
             return []
 
-        ret: list[dict[str, JSONValue]] = []
+        ret: list[JSONValue] = []
         for link in valdir.iterdir():
             if not link.is_symlink() or not link.exists():
                 continue
             try:
                 with open(link, "r") as f:
-                    ret.append(cast(dict[str, JSONValue], json.load(f)))
+                    ret.append(cast(JSONValue, json.load(f)))
             except:
                 continue
 
@@ -192,7 +192,7 @@ class FSDB:
         src_pk: str,
         dest_table: str,
         dest_pk: str,
-        data: dict[str, JSONValue] | None = None,
+        data: JSONValue | None = None,
     ) -> None:
         if not self._target_f(src_table, src_pk).exists():
             raise FileNotFoundError(f"Primary key {src_pk} not found in {src_table}.")
@@ -238,7 +238,7 @@ class FSDB:
 
     def scan(
         self, table: str, pattern: str = "*"
-    ) -> Iterator[tuple[str, dict[str, JSONValue]]]:
+    ) -> Iterator[tuple[str, JSONValue]]:
         dir = self._target_f(table)
 
         for p in dir.glob(pattern):
@@ -247,7 +247,7 @@ class FSDB:
 
             try:
                 with open(p, "r") as f:
-                    yield p.name, cast(dict[str, JSONValue], json.load(f))
+                    yield p.name, cast(JSONValue, json.load(f))
 
             except:
                 continue
