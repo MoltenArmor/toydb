@@ -215,7 +215,7 @@ def main():
                     DISPATCH[args.method](
                         db,
                         **{
-                            k.replace("-", "_"): v
+                            k: v
                             for k, v in vars(args).items()
                             if k not in ("root", "workdir", "server", "method")
                             and v is not None
