@@ -112,7 +112,11 @@ def sidecar(db: FSDB) -> None:
     for l in sys.stdin:
         r = json.loads(l)
         try:
-            resp = {"parameters": DISPATCH[r["method"]](db, **r["parameters"])}
+            resp = {
+                "parameters": DISPATCH[r["method"]](db, **r["parameters"])
+                if r.get("parameters")
+                else DISPATCH[r["method"]](db)
+            }
         except KeyError:
             resp = {"error": "UnknownMethod", "parameters": {"method": r["method"]}}
         except Exception as e:
