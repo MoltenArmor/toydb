@@ -5,6 +5,7 @@ import tempfile
 import logging
 from pathlib import Path
 from collections.abc import Callable, Mapping, Sequence
+from json.decoder import JSONDecodeError
 from fsdb.fsdb.fsdb import FSDB, FSDB_ROOT, FSDB_WORKDIR, JSONValue
 
 type Response = Mapping[str, JSONValue | Sequence[str | JSONValue] | bool | None]
@@ -110,7 +111,13 @@ DISPATCH: dict[str, Callable[..., Response]] = {
 
 def sidecar(db: FSDB) -> None:
     for l in sys.stdin:
-        r = json.loads(l)
+        try:
+            r = json.loads(l)
+        except JSONDecodeError:
+            sys.stdout.write(json.dumps({"error": "InvalidJSON"}) + "\n")
+            sys.stdout.flush()
+            continue
+
         try:
             resp = {
                 "parameters": DISPATCH[r["method"]](db, **r["parameters"])
@@ -118,9 +125,14 @@ def sidecar(db: FSDB) -> None:
                 else DISPATCH[r["method"]](db)
             }
         except KeyError:
-            resp = {"error": "UnknownMethod", "parameters": {"method": r["method"]}}
+            resp = (
+                {"error": "MethodNotFound", "parameters": {"method": r["method"]}}
+                if r.get("method")
+                else {"error": "InvalidParameter"}
+            )
         except Exception as e:
             resp = {"error": "InternalError", "parameters": {"field": repr(e)}}
+
         sys.stdout.write(json.dumps(resp) + "\n")
         sys.stdout.flush()
 
